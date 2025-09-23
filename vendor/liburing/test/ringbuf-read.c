@@ -59,6 +59,8 @@ static int test(const char *filename, int dio, int async)
 		fd = open(filename, O_RDONLY);
 	}
 	if (fd < 0) {
+		if (errno == EPERM || errno == EACCES)
+			return T_EXIT_SKIP;
 		perror("open");
 		return 1;
 	}
@@ -123,6 +125,7 @@ static int test(const char *filename, int dio, int async)
 		if (verify_buffer(buf + ((bid - 1) * BUF_SIZE), ud))
 			return 1;
 	}
+	free(buf);
 
 	return 0;
 }
@@ -144,6 +147,8 @@ int main(int argc, char *argv[])
 
 	fd = open(fname, O_WRONLY);
 	if (fd < 0) {
+		if (errno == EPERM || errno == EACCES)
+			return T_EXIT_SKIP;
 		perror("open");
 		goto err;
 	}

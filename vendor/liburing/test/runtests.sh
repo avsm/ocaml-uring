@@ -114,8 +114,11 @@ run_test()
 	elif [ "$status" -eq 77 ]; then
 		echo "Skipped"
 		SKIPPED+=("<$test_string>")
-	elif [ "$status" -ne 0 ]; then
+	elif [[ $test_string != xfail* ]] && [ "$status" -ne 0 ]; then
 		echo "Test $test_name failed with ret $status"
+		FAILED+=("<$test_string>")
+	elif [[ $test_string == xfail* ]] && [ "$status" -ne 1 ]; then
+		echo "Test $test_name expected fail status 1 but returned $status"
 		FAILED+=("<$test_string>")
 	elif ! _check_dmesg "$dmesg_marker" "$test_name"; then
 		echo "Test $test_name failed dmesg check"
@@ -153,9 +156,21 @@ for tst in "${TESTS[@]}"; do
 	fi
 done
 
+if [ "$DO_KMSG" -eq "1" ]; then
+	for dmesg_file in *.dmesg; do
+		if [ -f "$dmesg_file" ]; then
+			echo "Found dmesg file $dmesg_file, outputting:"
+			cat "$dmesg_file"
+		fi
+	done
+fi
+
 if [ "${#TIMED_OUT[*]}" -ne 0 ]; then
 	echo "Tests timed out (${#TIMED_OUT[*]}): ${TIMED_OUT[*]}"
 fi
+
+KVER=$(uname -rv)
+echo "Test run complete, kernel: $KVER"
 
 if [ "${#FAILED[*]}" -ne 0 ]; then
 	echo "Tests failed (${#FAILED[*]}): ${FAILED[*]}"
