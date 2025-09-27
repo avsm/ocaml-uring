@@ -127,8 +127,9 @@ val noop : 'a t -> 'a -> 'a job option
 
 (** Represents different Linux clocks. *)
 type clock =
-   Boottime (** [CLOCK_BOOTTIME] is a suspend-aware monotonic clock *)
- | Realtime (** [CLOCK_REALTIME] is a wallclock time clock that may be affected by discontinuous jumps *)
+ | Monotonic (** [CLOCK_MONOTONIC] is the default monotonic clock *)
+ | Boottime  (** [CLOCK_BOOTTIME] is a suspend-aware monotonic clock *)
+ | Realtime  (** [CLOCK_REALTIME] is a wallclock time clock that may be affected by discontinuous jumps *)
 
 val timeout: ?absolute:bool -> 'a t -> clock -> int64 -> 'a -> 'a job option
 (** [timeout t clock ns d] submits a timeout request to uring [t].
@@ -136,6 +137,11 @@ val timeout: ?absolute:bool -> 'a t -> clock -> int64 -> 'a -> 'a job option
     [absolute] denotes how [clock] and [ns] relate to one another. Default value is [false]
 
     [ns] is the timeout time in nanoseconds *)
+
+val register_clock : 'a t -> clock -> unit
+(** [register_clock t clock] sets the default clock source for timeout operations on ring [t].
+    This uses the IORING_REGISTER_CLOCK functionality available in newer kernels.
+    Note that individual timeout operations can still override this with their own clock choice. *)
 
 (** Flags that can be passed to {!openat2}. *)
 module Open_flags : sig

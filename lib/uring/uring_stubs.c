@@ -39,6 +39,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
+#include <time.h>
 // Check for something related to statx
 // this is needed for Alpine.
 #ifndef STATX_TYPE
@@ -174,7 +175,9 @@ ocaml_uring_set_timespec(value v_sketch_ptr, value v_timeout)
   return Val_unit;
 }
 
-#define Val_boottime Val_int(0)
+#define Val_monotonic Val_int(0)
+#define Val_boottime Val_int(1)
+#define Val_realtime Val_int(2)
 
 value /* noalloc */
 ocaml_uring_submit_timeout(value v_uring, value v_id, value v_sketch_ptr, value v_clock, value v_absolute)
@@ -182,12 +185,13 @@ ocaml_uring_submit_timeout(value v_uring, value v_id, value v_sketch_ptr, value 
   struct __kernel_timespec *t = Sketch_ptr_val(v_sketch_ptr);
   struct io_uring* ring = Ring_val(v_uring);
   struct io_uring_sqe* sqe;
-  int flags;
+  int flags = 0;
 
   if (v_clock == Val_boottime)
     flags = IORING_TIMEOUT_BOOTTIME;
-  else
+  else if (v_clock == Val_realtime)
     flags = IORING_TIMEOUT_REALTIME;
+  /* else Monotonic, which uses no flag */
 
   if(Bool_val(v_absolute))
     flags |= IORING_TIMEOUT_ABS;
@@ -1077,6 +1081,30 @@ ocaml_uring_register_eventfd(value v_uring, value v_fd) {
   int ret = io_uring_register_eventfd(ring, fd);
   if (ret)
     unix_error(-ret, "io_uring_register_eventfd", Nothing);
+
+  return Val_unit;
+}
+
+value
+ocaml_uring_register_clock(value v_uring, value v_clock) {
+  struct io_uring *ring = Ring_val(v_uring);
+  struct io_uring_clock_register reg;
+  int clockid;
+
+  memset(&reg, 0, sizeof(reg));
+
+  if (v_clock == Val_monotonic)
+    clockid = CLOCK_MONOTONIC;
+  else if (v_clock == Val_boottime)
+    clockid = CLOCK_BOOTTIME;
+  else /* Val_realtime */
+    clockid = CLOCK_REALTIME;
+
+  reg.clockid = clockid;
+
+  int ret = io_uring_register(ring->ring_fd, IORING_REGISTER_CLOCK, &reg, sizeof(reg));
+  if (ret)
+    unix_error(-ret, "io_uring_register_clock", Nothing);
 
   return Val_unit;
 }

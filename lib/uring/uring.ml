@@ -297,7 +297,10 @@ end
 
 type 'a job = 'a Heap.entry
 
-type clock = Boottime | Realtime
+type clock =
+  | Monotonic  (* Default - no flag needed *)
+  | Boottime   (* IORING_TIMEOUT_BOOTTIME *)
+  | Realtime   (* IORING_TIMEOUT_REALTIME *)
 
 type probe
 
@@ -355,6 +358,7 @@ module Uring = struct
 
   external error_of_errno : int -> Unix.error = "ocaml_uring_error_of_errno"
   external register_eventfd : t -> Unix.file_descr -> unit = "ocaml_uring_register_eventfd"
+  external register_clock : t -> clock -> unit = "ocaml_uring_register_clock"
 end
 
 type 'a t = {
@@ -589,6 +593,8 @@ let cancel t job user_data =
   with_id t (fun id -> Uring.submit_cancel t.uring id (Heap.ptr job)) user_data
 
 let sqe_ready t = Uring.sq_ready t.uring
+
+let register_clock t clock = Uring.register_clock t.uring clock
 
 (* Free stale entries in the sketch buffer, if possible.
    This isn't quite right: a busy system might never have 0 unsubmitted entries.

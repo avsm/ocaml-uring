@@ -44,10 +44,20 @@
  (modules socket_ops)
  (libraries unix uring))
 
+(executable
+ (name test_clock_source)
+ (modules test_clock_source)
+ (libraries unix uring logs logs.fmt))
+
 (rule
  (alias runtest)
  (package uring)
  (action (run ./poll_add.exe)))
+
+(rule
+ (alias runtest)
+ (package uring)
+ (action (run ./test_clock_source.exe)))
 
 (rule
  (alias runbenchmark)

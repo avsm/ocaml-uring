@@ -97,6 +97,8 @@ let uring_ops = [
   "IORING_OP_GETXATTR";
   "IORING_OP_SOCKET";
   "IORING_OP_URING_CMD";
+  "IORING_OP_SEND_ZC";
+  "IORING_OP_SENDMSG_ZC";
   "IORING_OP_READ_MULTISHOT";
   "IORING_OP_WAITID";
   "IORING_OP_FUTEX_WAIT";
@@ -106,6 +108,11 @@ let uring_ops = [
   "IORING_OP_FTRUNCATE";
   "IORING_OP_BIND";
   "IORING_OP_LISTEN";
+  "IORING_OP_RECV_ZC";
+  "IORING_OP_EPOLL_WAIT";
+  "IORING_OP_READV_FIXED";
+  "IORING_OP_WRITEV_FIXED";
+  "IORING_OP_PIPE";
 ]
 
 let uring_setup_flags = [
@@ -126,6 +133,71 @@ let uring_setup_flags = [
   "IORING_SETUP_NO_MMAP";
   "IORING_SETUP_REGISTERED_FD_ONLY";
   "IORING_SETUP_NO_SQARRAY";
+  "IORING_SETUP_HYBRID_IOPOLL";
+]
+
+let uring_register_ops = [
+  "IORING_REGISTER_BUFFERS";
+  "IORING_UNREGISTER_BUFFERS";
+  "IORING_REGISTER_FILES";
+  "IORING_UNREGISTER_FILES";
+  "IORING_REGISTER_EVENTFD";
+  "IORING_UNREGISTER_EVENTFD";
+  "IORING_REGISTER_FILES_UPDATE";
+  "IORING_REGISTER_EVENTFD_ASYNC";
+  "IORING_REGISTER_PROBE";
+  "IORING_REGISTER_PERSONALITY";
+  "IORING_UNREGISTER_PERSONALITY";
+  "IORING_REGISTER_RESTRICTIONS";
+  "IORING_REGISTER_ENABLE_RINGS";
+  "IORING_REGISTER_FILES2";
+  "IORING_REGISTER_FILES_UPDATE2";
+  "IORING_REGISTER_BUFFERS2";
+  "IORING_REGISTER_BUFFERS_UPDATE";
+  "IORING_REGISTER_IOWQ_AFF";
+  "IORING_UNREGISTER_IOWQ_AFF";
+  "IORING_REGISTER_IOWQ_MAX_WORKERS";
+  "IORING_REGISTER_RING_FDS";
+  "IORING_UNREGISTER_RING_FDS";
+  "IORING_REGISTER_PBUF_RING";
+  "IORING_UNREGISTER_PBUF_RING";
+  "IORING_REGISTER_SYNC_CANCEL";
+  "IORING_REGISTER_FILE_ALLOC_RANGE";
+  "IORING_REGISTER_PBUF_STATUS";
+  "IORING_REGISTER_NAPI";
+  "IORING_UNREGISTER_NAPI";
+  "IORING_REGISTER_CLOCK";
+  "IORING_REGISTER_CLONE_BUFFERS";
+  "IORING_REGISTER_SEND_MSG_RING";
+  "IORING_REGISTER_ZCRX_IFQ";
+  "IORING_REGISTER_RESIZE_RINGS";
+  "IORING_REGISTER_MEM_REGION";
+]
+
+let uring_timeout_flags = [
+  "IORING_TIMEOUT_ABS";
+  "IORING_TIMEOUT_UPDATE";
+  "IORING_TIMEOUT_BOOTTIME";
+  "IORING_TIMEOUT_REALTIME";
+  "IORING_LINK_TIMEOUT_UPDATE";
+  "IORING_TIMEOUT_ETIME_SUCCESS";
+  "IORING_TIMEOUT_MULTISHOT";
+]
+
+let uring_enter_flags = [
+  "IORING_ENTER_GETEVENTS";
+  "IORING_ENTER_SQ_WAKEUP";
+  "IORING_ENTER_SQ_WAIT";
+  "IORING_ENTER_EXT_ARG";
+  "IORING_ENTER_REGISTERED_RING";
+  "IORING_ENTER_ABS_TIMER";
+  "IORING_ENTER_EXT_ARG_REG";
+  "IORING_ENTER_NO_IOWAIT";
+]
+
+let uring_pbuf_ring_flags = [
+  "IOU_PBUF_RING_MMAP";
+  "IOU_PBUF_RING_INC";
 ]
 
 let uring_defs c =
@@ -151,6 +223,54 @@ let uring_defs c =
           let ocaml_name = String.sub name prefix_len (String.length name - prefix_len) |> String.lowercase_ascii in
           (ocaml_name, v)
         | _ -> assert false
+      )
+  ) @
+  Gen.hex_module "Ioring_register" (
+    C.C_define.import c (List.map (fun name -> name, C.C_define.Type.Int) uring_register_ops)
+      ~c_flags:["-D_GNU_SOURCE"; "-I"; include_dir]
+      ~includes:["liburing.h"]
+    |> List.filter_map (function
+        | name, C.C_define.Value.Int v ->
+          let prefix_len = String.length "IORING_" in
+          let ocaml_name = String.sub name prefix_len (String.length name - prefix_len) |> String.lowercase_ascii in
+          Some (ocaml_name, v)
+        | _ -> None
+      )
+  ) @
+  Gen.hex_module "Ioring_timeout" (
+    C.C_define.import c (List.map (fun name -> name, C.C_define.Type.Int) uring_timeout_flags)
+      ~c_flags:["-D_GNU_SOURCE"; "-I"; include_dir]
+      ~includes:["liburing.h"]
+    |> List.filter_map (function
+        | name, C.C_define.Value.Int v ->
+          let prefix_len = String.length "IORING_TIMEOUT_" in
+          let ocaml_name = String.sub name prefix_len (String.length name - prefix_len) |> String.lowercase_ascii in
+          Some (ocaml_name, v)
+        | _ -> None
+      )
+  ) @
+  Gen.hex_module "Ioring_enter" (
+    C.C_define.import c (List.map (fun name -> name, C.C_define.Type.Int) uring_enter_flags)
+      ~c_flags:["-D_GNU_SOURCE"; "-I"; include_dir]
+      ~includes:["liburing.h"]
+    |> List.filter_map (function
+        | name, C.C_define.Value.Int v ->
+          let prefix_len = String.length "IORING_ENTER_" in
+          let ocaml_name = String.sub name prefix_len (String.length name - prefix_len) |> String.lowercase_ascii in
+          Some (ocaml_name, v)
+        | _ -> None
+      )
+  ) @
+  Gen.hex_module "Ioring_pbuf_ring" (
+    C.C_define.import c (List.map (fun name -> name, C.C_define.Type.Int) uring_pbuf_ring_flags)
+      ~c_flags:["-D_GNU_SOURCE"; "-I"; include_dir]
+      ~includes:["liburing.h"]
+    |> List.filter_map (function
+        | name, C.C_define.Value.Int v ->
+          let prefix_len = String.length "IOU_PBUF_RING_" in
+          let ocaml_name = String.sub name prefix_len (String.length name - prefix_len) |> String.lowercase_ascii in
+          Some (ocaml_name, v)
+        | _ -> None
       )
   )
 
