@@ -101,19 +101,80 @@ module Setup_flags : sig
       This is an alternative to {!sqe128}. *)
 end
 
+module Errno : sig
+  (** Linux errno values. *)
+  type t = [
+    | `E2BIG | `EACCES | `EAGAIN | `EBADF | `EBUSY | `ECHILD | `EDEADLK
+    | `EDOM | `EEXIST | `EFAULT | `EFBIG | `EINTR | `EINVAL | `EIO
+    | `EISDIR | `EMFILE | `EMLINK | `ENAMETOOLONG | `ENFILE | `ENODEV
+    | `ENOENT | `ENOEXEC | `ENOLCK | `ENOMEM | `ENOSPC | `ENOSYS
+    | `ENOTDIR | `ENOTEMPTY | `ENOTTY | `ENXIO | `EPERM | `EPIPE
+    | `ERANGE | `EROFS | `ESPIPE | `ESRCH | `EXDEV | `EINPROGRESS
+    | `EALREADY | `ENOTSOCK | `EDESTADDRREQ | `EMSGSIZE | `EPROTOTYPE
+    | `ENOPROTOOPT | `EPROTONOSUPPORT | `ESOCKTNOSUPPORT | `EOPNOTSUPP
+    | `EPFNOSUPPORT | `EAFNOSUPPORT | `EADDRINUSE | `EADDRNOTAVAIL
+    | `ENETDOWN | `ENETUNREACH | `ENETRESET | `ECONNABORTED | `ECONNRESET
+    | `ENOBUFS | `EISCONN | `ENOTCONN | `ESHUTDOWN | `ETOOMANYREFS
+    | `ETIMEDOUT | `ECONNREFUSED | `EHOSTDOWN | `EHOSTUNREACH | `ELOOP
+    | `EOVERFLOW
+    | `ENOTBLK | `ETXTBSY | `ENOMSG | `EIDRM | `ECHRNG | `EL2NSYNC
+    | `EL3HLT | `EL3RST | `ELNRNG | `EUNATCH | `ENOCSI | `EL2HLT
+    | `EBADE | `EBADR | `EXFULL | `ENOANO | `EBADRQC | `EBADSLT
+    | `EBFONT | `ENOSTR | `ENODATA | `ETIME | `ENOSR | `ENONET
+    | `ENOPKG | `EREMOTE | `ENOLINK | `EADV | `ESRMNT | `ECOMM
+    | `EPROTO | `EMULTIHOP | `EDOTDOT | `EBADMSG | `ENOTUNIQ | `EBADFD
+    | `EREMCHG | `ELIBACC | `ELIBBAD | `ELIBSCN | `ELIBMAX | `ELIBEXEC
+    | `EILSEQ | `ERESTART | `ESTRPIPE | `EUSERS | `ESTALE | `EUCLEAN
+    | `ENOTNAM | `ENAVAIL | `EISNAM | `EREMOTEIO | `EDQUOT | `ENOMEDIUM
+    | `EMEDIUMTYPE | `ECANCELED | `ENOKEY | `EKEYEXPIRED | `EKEYREVOKED
+    | `EKEYREJECTED | `EOWNERDEAD | `ENOTRECOVERABLE | `ERFKILL | `EHWPOISON
+    | `EWOULDBLOCK | `EDEADLOCK | `EFSBADCRC | `EFSCORRUPTED
+    | `EUNKNOWN of int
+  ]
+
+  val of_int : int -> t
+  (** [of_int n] is the errno for code [n]. The sign is ignored, so a negative
+      or positive errno map to the same value.  Unrecognised codes become
+      [`EUNKNOWN c] with [c] positive. *)
+
+  val to_int : t -> int
+  (** [to_int t] is the positive Linux errno number for [t]. *)
+
+  val to_string : t -> string
+  (** [to_string t] is the symbolic name. *)
+
+  val pp : t Fmt.t
+
+  val of_unix : Unix.error -> t
+  (** [of_unix e] lifts a {!Unix.error} into a [t] value. In particular,
+      [EUNKNOWNERR code] — how a {!Unix.Unix_error} carries a Linux-specific
+      code that {!Unix.error} has no name for — is decoded back to its
+      symbolic variant (e.g. [of_unix (EUNKNOWNERR 125)] is [`ECANCELED]). *)
+
+  val to_unix : t -> Unix.error
+  (** [to_unix t] is the corresponding {!Unix.error}. Linux-specific codes
+      with no {!Unix.error} name become [EUNKNOWNERR n]. *)
+end
+
 module Res : sig
   (** The result of a uring operation (typically the same as the return value of the corresponding syscall). *)
 
   type t = private int
   (** The return value. If negative, it is the negative errno value giving the error. *)
 
-  val int_result : t -> (int, Unix.error) result
+  val errno : t -> Errno.t option
+  (** [errno t] is [Some e] if [t] is negative (an error), or [None] otherwise. *)
+
+  val int_result : t -> (int, Errno.t) result
   (** [int_result t] is [Error _] if [t] is negative, or [Ok t] otherwise. *)
 
   val int_exn : t -> string -> string -> int
-  (** [int_exn t fn arg] raises {!Unix.Unix_error} if [t] is negative, and returns [t] otherwise. *)
+  (** [int_exn t fn arg] raises {!Unix.Unix_error} if [t] is negative, and returns [t] otherwise.
+      Linux-specific codes with no {!Unix.error} name are raised as
+      [EUNKNOWNERR code]; use {!Errno.of_unix} to recover the symbolic
+      {!Errno.t} from the exception's error. *)
 
-  val fd_result : t -> (Unix.file_descr, Unix.error) result
+  val fd_result : t -> (Unix.file_descr, Errno.t) result
   (** [fd_result t] is like [int_result t], but returns [t] as a file descriptor. *)
 
   val fd_exn : t -> string -> string -> Unix.file_descr
@@ -160,7 +221,7 @@ val exit : 'a t -> unit
     for the "fixed buffer" mode of io_uring to avoid data copying between
     userspace and the kernel. *)
 
-val set_fixed_buffer : 'a t -> Cstruct.buffer -> (unit, [> `ENOMEM]) result
+val set_fixed_buffer : 'a t -> Cstruct.buffer -> (unit, Errno.t) result
 (** [set_fixed_buffer t buf] sets [buf] as the fixed buffer for [t].
 
     Fixed buffers allow zero-copy I/O operations using {!read_fixed} and {!write_fixed}.
@@ -170,10 +231,7 @@ val set_fixed_buffer : 'a t -> Cstruct.buffer -> (unit, [> `ENOMEM]) result
 
     If [t] already has a buffer set, the old one will be removed.
 
-    @return [Ok ()] on success, or [Error `ENOMEM] if:
-            - Insufficient kernel resources are available
-            - The caller's RLIMIT_MEMLOCK resource limit would be exceeded
-            - The buffer is too large to pin in memory
+    @return [Ok ()] on success, or [Error errno] if registration fails
     @raise Invalid_argument if there are any requests in progress *)
 
 val buf : 'a t -> Cstruct.buffer
