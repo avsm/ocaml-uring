@@ -54,6 +54,15 @@ module Iovec : sig
   val to_string : t -> string
   (** [to_string t] copies [t]'s live region [\[off, off+len)] out as a string. *)
 
+  type buffer = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
+  (** The type of {!Stdlib.Bigarray} buffers used for interop. *)
+
+  val to_bigarray : t -> buffer
+  (** [to_bigarray t] is a bigarray aliasing [t]'s data. This allows
+      bigarray-based interfaces to be used without copying, although for
+      performance you should stick to bytes if possible (since the bigarray
+      involves the allocation of a C struct as well). *)
+
   val shift : t -> int -> t
   (** [shift t n] is [t] with its live region advanced past the first [n] bytes,
       sharing the same backing [buf]. Useful for resubmitting the tail after a

@@ -34,6 +34,7 @@
 #include <errno.h>
 #include <string.h>
 #include <poll.h>
+#include <stdatomic.h>
 #include <sys/uio.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -285,6 +286,64 @@ ocaml_uring_submit_poll_add(value v_uring, value v_fd, value v_id, value v_poll_
   io_uring_prep_poll_add(sqe, Int_val(v_fd), poll_mask);
   io_uring_sqe_set_data(sqe, (void *)Long_val(v_id));
   return (Val_true);
+
+}
+
+/* We need a custom bigarray here in order to alias an existing bytes buffer in
+ * the heap. We need to ensure that no copy of the bytes is made, but also that
+ * the bytes arent freed while the bigarray (and any slices thereof) are also
+ * still live.
+ *
+ * A 'normal' bigarray cant express this aliasing. A CAML_BA_EXTERNAL bigarray
+ * doesnt do any lifetime tracking, while a CAML_BA_MANAGED bigarray has the
+ * runtime call free() which would corrupt the heap when the storage is
+ * `bytes`.
+ * 
+ * We therefore allocate the bigarray as CAML_BA_MANAGED | CAML_BA_SUBARRAY
+ * with a hand-built proxy attached at creation. This is morally ok since the
+ * bigarray is indeed a subarray, just not of another bigarray!  Managed mode
+ * allows every derived bigarray slice to be tracked via the runtime's proxy.
+ * Pre-attaching the proxy with a NULL data pointer halts the free paths when
+ * the refcount reaches zero, while the BA_MANAGED status stops free being
+ * called on the bytes.
+ *
+ * Keeping the bytes alive is then done purely on the OCaml side. A finaliser
+ * closure that captures the bytes is attached to the original bigarray, and
+ * serves as the GC root. When the original becomes unreachable while the proxy
+ * refcount shows other family members are still live, the finaliser
+ * re-registers itself on the same value. The chain terminates when the
+ * refcount is 0, after which the bytes become collectable as normal since the
+ * bigarray will be GCed.
+ *
+ * This only works if the bytes themselves dont move, which is guaranteed by
+ * the OCaml 5 runtime minimum size. Phew! 
+ */
+
+value
+ocaml_uring_iovec_to_bigarray(value v_buf, value v_off, value v_len)
+{
+  CAMLparam1(v_buf);
+  CAMLlocal1(v_ba);
+  /* this must be malloc() as caml_ba_finalize will call free() on it */
+  struct caml_ba_proxy *proxy = malloc(sizeof(struct caml_ba_proxy));
+  if (proxy == NULL) caml_raise_out_of_memory();
+  v_ba = caml_ba_alloc_dims(CAML_BA_CHAR | CAML_BA_C_LAYOUT | CAML_BA_MANAGED | CAML_BA_SUBARRAY,
+                            1, Bytes_val(v_buf) + Long_val(v_off),
+                            (intnat) Long_val(v_len));
+  /* caml_ba_update_proxy isnt exposed by the ocaml runtime so do this by hand */
+  atomic_init(&proxy->refcount, 1);
+  proxy->data = NULL;
+  proxy->size = 0;
+  Caml_ba_array_val(v_ba)->proxy = proxy;
+  CAMLreturn(v_ba);
+}
+
+/* Number of bigarrays sharing [v_ba]'s data, the argument included. */
+value /* noalloc */
+ocaml_uring_ba_family_refs(value v_ba)
+{
+  struct caml_ba_proxy *proxy = Caml_ba_array_val(v_ba)->proxy;
+  return Val_long(proxy == NULL ? 1 : (intnat) atomic_load(&proxy->refcount));
 }
 
 value /* noalloc */

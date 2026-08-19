@@ -2,6 +2,8 @@
 #define CAML_NAME_SPACE
 #define _GNU_SOURCE
 #include <caml/mlvalues.h>
+CAMLprim value ocaml_uring_iovec_to_bigarray(value, value, value);
+CAMLprim value ocaml_uring_ba_family_refs(value);
 CAMLprim value ocaml_uring_make_statx(value);
 CAMLprim int64_t ocaml_uring_statx_blksize_native(value);
 CAMLprim value ocaml_uring_statx_blksize_bytes(value);

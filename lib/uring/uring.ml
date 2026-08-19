@@ -65,6 +65,21 @@ module Iovec = struct
 
   let to_string { buf; off; len } = Bytes.sub_string buf off len
 
+  type buffer = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
+
+  external unsafe_to_bigarray : bytes -> int -> int -> buffer = "ocaml_uring_iovec_to_bigarray"
+  external ba_family_refs : buffer -> int = "ocaml_uring_ba_family_refs" [@@noalloc]
+
+  let rec guard buf ba =
+    Gc.finalise (guard_check buf) ba
+  and guard_check buf ba =
+    if ba_family_refs ba > 1 then guard buf ba
+
+  let to_bigarray { buf; off; len } =
+    let ba = unsafe_to_bigarray buf off len in
+    guard buf ba;
+    ba
+
   let shift t n =
     if n < 0 || n > t.len then
       Fmt.invalid_arg "Iovec.shift: %d out of range [0, %d]" n t.len;
