@@ -30,6 +30,10 @@ val ptr : 'a entry -> ptr
 (** [ptr e] is the index of [e].
     @raise Invalid_argument if [e] has already been freed. *)
 
+val mem : 'a t -> 'a entry -> bool
+(** [mem t e] is [true] iff [e] is a currently allocated entry of [t].
+    This does not allocate. *)
+
 val alloc : 'a t -> 'a -> extra_data:'b -> 'a entry
 (** [alloc t a ~extra_data] adds the value [a] to [t] and returns a
     pointer to that value, or raises [Invalid_argument] if no extra space

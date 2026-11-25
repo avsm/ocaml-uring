@@ -52,6 +52,10 @@ let ptr = function
   | Entry { ptr; _ } -> ptr
   | Empty -> assert false
 
+let mem t entry =
+  let ptr = ptr entry in
+  ptr >= 0 && t.data.(ptr) == entry
+
 let create : type a. int -> a t =
  fun n ->
   if n < 0 || n > Sys.max_array_length then invalid_arg "Heap.create" ;

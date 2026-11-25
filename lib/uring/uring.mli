@@ -976,7 +976,8 @@ val cancel : 'a t -> 'a job -> 'a -> 'a job option
 
     @param job The job handle returned when the operation was submitted
     @return [None] if the submission queue is full; otherwise [Some cancel_job]
-    @raise Invalid_argument if the job has already been collected by {!wait} or {!get_cqe_nonblocking} *)
+    @raise Invalid_argument if the job has already been collected by {!wait} or {!get_cqe_nonblocking},
+           or if it belongs to another ring. *)
 
 module Msghdr : sig
   type t

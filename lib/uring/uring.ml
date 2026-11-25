@@ -805,6 +805,8 @@ let ftruncate t fd ~len user_data =
 
 let cancel t job user_data =
   ignore (Heap.ptr job : Uring.id);  (* Check it's still valid *)
+  if not (Heap.mem t.data job) then
+    invalid_arg "Uring.cancel: job belongs to another ring";
   with_id t (fun id -> Uring.submit_cancel t.uring id (Heap.ptr job)) user_data
 
 let sqe_ready t = Uring.sq_ready t.uring
